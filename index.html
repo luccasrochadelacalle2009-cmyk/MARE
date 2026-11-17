@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1b7f8f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Maré – Diário do corpo</title>
+<style>
+:root{--bg:#e9f1f0;--card:#fff;--ink:#10303a;--mute:#5d7a82;--sea:#1b7f8f;--coral:#d9532b;--line:#cfe0e0;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1f24;--card:#142b32;--ink:#e6f2f2;--mute:#8fb0b6;--sea:#4cc0d2;--coral:#ff8a63;--line:#25424a;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom))}
+main{max-width:560px;margin:0 auto;padding:16px}
+h2{font:700 28px/1.1 Georgia,serif;margin:8px 0 16px}
+h3{font:700 18px Georgia,serif;margin:22px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.big{font:700 32px/1 Georgia,serif}.mute{color:var(--mute);font-size:14px}
+input,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.row{display:flex;gap:8px;margin-bottom:10px}
+button,.btn{display:inline-block;text-align:center;padding:11px 14px;border:0;border-radius:10px;background:var(--sea);color:#fff;font:600 16px system-ui;cursor:pointer}
+.btn.alt,button.alt{background:transparent;color:var(--sea);border:1.5px solid var(--sea)}
+button.x{background:none;color:var(--mute);padding:4px 10px}
+.seg{display:flex;gap:6px;margin-bottom:10px}.seg button{flex:1;background:var(--card);color:var(--ink);border:1px solid var(--line)}.seg button.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+.li{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}.li:last-child{border:0}
+.dn{color:var(--sea);font-weight:600}.up{color:var(--coral);font-weight:600}
+svg{width:100%;height:auto}
+.ph{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.ph img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;cursor:pointer}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center}.cmp img{width:100%;border-radius:10px}
+.alert{border-color:var(--coral)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:var(--mute);border-radius:0;padding:10px 0;font-size:12px}nav button.on{color:var(--sea)}nav span{display:block;font-size:20px}
+dialog{border:0;border-radius:14px;padding:12px;max-width:92vw;background:var(--card);color:var(--ink)}dialog img{max-width:100%;max-height:70vh;border-radius:8px}
+:focus-visible{outline:3px solid var(--coral);outline-offset:2px}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="nav"></nav>
+<dialog id="dlg"></dialog>
+<script>
+const T=()=>new Date().toLocaleDateString('sv'),F=d=>d.split('-').reverse().join('/'),N=v=>v.toFixed(1).replace('.',',');
+let D=JSON.parse(localStorage.mare||'null')||{s:{n:'',h:0,g:0},w:[],m:[],a:{}};
+const S=()=>localStorage.mare=JSON.stringify(D);
+const db=new Promise(r=>{const q=indexedDB.open('mare',1);q.onupgradeneeded=()=>q.result.createObjectStore('p',{keyPath:'id'});q.onsuccess=()=>r(q.result)});
+const tx=async(m,f)=>{const d=await db;return new Promise(r=>{const q=f(d.transaction('p',m).objectStore('p'));q.onsuccess=()=>r(q.result)})};
+const pAll=()=>tx('readonly',o=>o.getAll()),pPut=p=>tx('readwrite',o=>o.put(p)),pDel=i=>tx('readwrite',o=>o.delete(i));
+const M=[['cintura','Cintura'],['quadril','Quadril'],['peito','Peito'],['braco','Braço'],['coxa','Coxa'],['pescoco','Pescoço']];
+const TABS=[['hoje','🌊','Hoje'],['peso','⚖️','Peso'],['med','📏','Medidas'],['fotos','📷','Fotos'],['aj','⚙️','Ajustes']];
+let tab='hoje',ang='Frente';
+const W=()=>[...D.w].sort((a,b)=>a.d.localeCompare(b.d));
+const delta=(x,inv)=>x==null?'':`<span class="${x<=0?'dn':'up'}">${x>0?'+':''}${N(x)}</span>`;
+async function go(t){tab=t??tab;$('#nav').innerHTML=TABS.map(x=>`<button class="${x[0]==tab?'on':''}" onclick="go('${x[0]}')"><span>${x[1]}</span>${x[2]}</button>`).join('');
+ $('#app').innerHTML=await {hoje:vHoje,peso:vPeso,med:vMed,fotos:vFotos,aj:vAj}[tab]();scrollTo(0,0)}
+const $=s=>document.querySelector(s);
+
+function chart(a){if(a.length<2)return'<p class="mute">Registre ao menos 2 pesos para ver o gráfico.</p>';
+ const w=320,h=140,p=14,v=a.map(x=>x.v),mn=Math.min(...v)-.5,mx=Math.max(...v)+.5,
+ pts=a.map((x,i)=>[p+i*(w-2*p)/(a.length-1),h-p-(x.v-mn)/(mx-mn)*(h-2*p)]);
+ return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Gráfico de peso"><polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--sea)" stroke-width="2.5" stroke-linejoin="round"/>${pts.map(q=>`<circle cx="${q[0]}" cy="${q[1]}" r="3" fill="var(--sea)"/>`).join('')}</svg>`}
+
+async function vHoje(){const w=W(),c=w.at(-1),s=w[0],ps=await pAll(),lp=ps.map(p=>p.d).sort().at(-1),
+ dias=lp?Math.floor((Date.now()-new Date(lp+'T12:00'))/864e5):null,cp=D.a[T()]||0,g=+D.s.g,h=+D.s.h;
+ const imc=c&&h?c.v/((h/100)**2):0;
+ const lembrete=dias==null||dias>=7?`<div class="card alert"><b>Hora da foto semanal</b><p class="mute">${dias==null?'Você ainda não tem fotos.':'Última foto há '+dias+' dias.'} Use sempre o mesmo local, luz e roupa.</p><button onclick="go('fotos')">Tirar foto</button></div>`:'';
+ return `<h2>Olá${D.s.n?', '+D.s.n:''}</h2>${lembrete}
+ <div class="grid"><div class="card"><div class="mute">Peso atual</div><div class="big">${c?N(c.v):'–'}<small> kg</small></div></div>
+ <div class="card"><div class="mute">Já perdeu</div><div class="big">${c?N(s.v-c.v):'–'}<small> kg</small></div></div>
+ <div class="card"><div class="mute">Falta para a meta</div><div class="big">${c&&g?N(Math.max(0,c.v-g)):'–'}<small> kg</small></div></div>
+ <div class="card"><div class="mute">IMC</div><div class="big">${imc?N(imc):'–'}</div></div></div>
+ <div class="card"><b>Água de hoje</b><p class="big">${cp} <small>copos (${N(cp*.25)} L)</small></p>
+ <div class="row"><button onclick="water(1)">+ 250 ml</button><button class="alt" onclick="water(-1)">− 1</button></div><span class="mute">Meta sugerida: 10 copos</span></div>
+ <div class="card"><b>Evolução</b>${chart(w)}</div>`}
+function water(n){D.a[T()]=Math.max(0,(D.a[T()]||0)+n);S();go()}
+
+function vPeso(){const w=W();
+ return `<h2>Peso</h2><div class="card"><div class="row"><input id="pd" type="date" value="${T()}"><input id="pv" type="number" step="0.1" inputmode="decimal" placeholder="kg"></div><button onclick="addW()">Salvar peso</button></div>
+ <div class="card">${chart(w)}</div><div class="card">${w.length?[...w].reverse().map((x,i,a)=>{const p=a[i+1];return `<div class="li"><span>${F(x.d)}</span><b>${N(x.v)} kg</b>${p?delta(x.v-p.v):'<span></span>'}<button class="x" aria-label="Excluir" onclick="delW('${x.d}')">✕</button></div>`}).join(''):'<p class="mute">Nenhum peso registrado. Pese-se em jejum, sempre no mesmo horário.</p>'}</div>`}
+function addW(){const d=$('#pd').value,v=parseFloat($('#pv').value.replace(',','.'));if(!d||!v)return alert('Informe a data e o peso.');
+ D.w=D.w.filter(x=>x.d!=d);D.w.push({d,v});S();go()}
+function delW(d){if(confirm('Excluir este peso?')){D.w=D.w.filter(x=>x.d!=d);S();go()}}
+
+function vMed(){const l=[...D.m].sort((a,b)=>a.d.localeCompare(b.d));
+ return `<h2>Medidas (cm)</h2><div class="card"><input id="md" type="date" value="${T()}" style="margin-bottom:10px"><div class="grid">${M.map(m=>`<input id="m_${m[0]}" type="number" step="0.1" inputmode="decimal" placeholder="${m[1]}">`).join('')}</div><br><button onclick="addM()">Salvar medidas</button></div>
+ ${l.length?[...l].reverse().map(e=>{const i=l.indexOf(e);return `<div class="card"><div class="li" style="padding-top:0"><b>${F(e.d)}</b><button class="x" aria-label="Excluir" onclick="delM('${e.d}')">✕</button></div>${M.filter(m=>e[m[0]]).map(m=>{const p=l.slice(0,i).reverse().find(x=>x[m[0]]);return `<div class="li"><span>${m[1]}</span><span>${N(e[m[0]])} ${p?delta(e[m[0]]-p[m[0]]):''}</span></div>`}).join('')}</div>`}).join(''):'<p class="mute">Meça sempre no mesmo ponto do corpo, de manhã, sem apertar a fita.</p>'}`}
+function addM(){const e={d:$('#md').value};M.forEach(m=>{const v=parseFloat($('#m_'+m[0]).value.replace(',','.'));if(v)e[m[0]]=v});
+ if(Object.keys(e).length<2)return alert('Preencha ao menos uma medida.');D.m=D.m.filter(x=>x.d!=e.d);D.m.push(e);S();go()}
+function delM(d){if(confirm('Excluir estas medidas?')){D.m=D.m.filter(x=>x.d!=d);S();go()}}
+
+async function vFotos(){const all=(await pAll()).filter(p=>p.a==ang).sort((a,b)=>a.d.localeCompare(b.d));window._ph=all;
+ return `<h2>Fotos</h2><div class="seg">${['Frente','Lado','Costas'].map(a=>`<button class="${a==ang?'on':''}" onclick="ang='${a}';go()">${a}</button>`).join('')}</div>
+ <div class="row"><label class="btn" style="flex:1">📷 Tirar foto<input type="file" accept="image/*" capture="environment" hidden onchange="addP(this)"></label><label class="btn alt" style="flex:1">Galeria<input type="file" accept="image/*" hidden onchange="addP(this)"></label></div>
+ ${all.length>1?`<div class="card"><b>Antes e agora</b><div class="cmp"><div><img src="${all[0].img}" alt="Primeira foto"><div class="mute">${F(all[0].d)}</div></div><div><img src="${all.at(-1).img}" alt="Foto mais recente"><div class="mute">${F(all.at(-1).d)}</div></div></div></div>`:''}
+ ${all.length?`<div class="ph">${[...all].reverse().map((p,i)=>`<div><img src="${p.img}" alt="${F(p.d)}" onclick="showP(${all.length-1-i})"><div class="mute" style="text-align:center">${F(p.d)}</div></div>`).join('')}</div>`:'<p class="mute">Nenhuma foto de '+ang.toLowerCase()+'. Tire uma por semana, com a mesma luz e posição.</p>'}`}
+async function addP(el){const f=el.files[0];if(!f)return;const b=await createImageBitmap(f),k=Math.min(1,1000/Math.max(b.width,b.height)),c=document.createElement('canvas');
+ c.width=b.width*k;c.height=b.height*k;c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+ await pPut({id:Date.now(),d:T(),a:ang,img:c.toDataURL('image/jpeg',.8)});go()}
+function showP(i){const p=_ph[i];$('#dlg').innerHTML=`<img src="${p.img}" alt=""><p>${p.a} – ${F(p.d)}</p><div class="row"><button class="alt" onclick="dlg.close()">Fechar</button><button style="background:var(--coral)" onclick="if(confirm('Excluir esta foto?')){pDel(${p.id}).then(()=>{dlg.close();go()})}">Excluir</button></div>`;dlg.showModal()}
+
+function vAj(){const s=D.s;return `<h2>Ajustes</h2><div class="card"><label>Seu nome<input value="${s.n}" onchange="D.s.n=this.value;S()"></label><br><br><label>Altura (cm)<input type="number" inputmode="numeric" value="${s.h||''}" onchange="D.s.h=+this.value;S()"></label><br><br><label>Meta de peso (kg)<input type="number" step="0.1" inputmode="decimal" value="${s.g||''}" onchange="D.s.g=+this.value;S()"></label></div>
+ <div class="card"><b>Backup</b><p class="mute">Seus dados ficam só neste aparelho. Exporte de vez em quando para não perder nada.</p><div class="row"><button onclick="exp()">Exportar</button><label class="btn alt">Importar<input type="file" accept=".json" hidden onchange="imp(this)"></label></div></div>
+ <p class="mute">Dica: no celular, use “Adicionar à tela inicial” para instalar o app.</p>`}
+async function exp(){const j=JSON.stringify({D,p:await pAll()}),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([j],{type:'application/json'}));a.download='mare-backup-'+T()+'.json';a.click()}
+async function imp(el){try{const j=JSON.parse(await el.files[0].text());if(!confirm('Isso substitui os dados atuais. Continuar?'))return;D=j.D;S();for(const p of j.p)await pPut(p);go()}catch(e){alert('Arquivo inválido.')}}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+go();
+</script>
+</body>
+</html>
